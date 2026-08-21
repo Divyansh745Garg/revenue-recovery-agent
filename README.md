@@ -3,7 +3,7 @@
 > A production-inspired distributed e-commerce platform built with **Java 21**, **Spring Boot 3**, **Docker**, **RabbitMQ**, **Redis**, and **PostgreSQL**. The project demonstrates enterprise backend architecture through microservices, Saga-based distributed transactions, stateless authentication, event-driven communication, and scalable system design.
 
 > **📚 Architecture & Engineering Deep Dive**  
-> For a detailed breakdown of the system design—including the Transactional Outbox pattern, Saga rollbacks, Redis-backed idempotency, and the "Castle & Moat" security model—see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+> For a detailed breakdown of the system design—including the Transactional Outbox pattern, Saga rollbacks, Redis-backed idempotency, and the "Castle & Moat" security model—see **[Architecture.md](Architecture.md)**.
 
 ---
 
