@@ -32,4 +32,6 @@ bin/
 **/target/
 *.jar
 *.iml
-.idea/
+.idea/target/
+*.jar
+.env
