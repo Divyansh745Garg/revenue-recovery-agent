@@ -177,6 +177,8 @@ services:
   # 3. API GATEWAY (The Entry Point)
   # ==========================================
   recovery-agent-service:
+    env_file:
+      - .env
     build: ./recovery-agent-service
     container_name: recovery-agent-service
     ports:
@@ -185,13 +187,21 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/commerce_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=password
-      - RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_HOST=rabbitmq
       - PAYMENT_SERVICE_URL=http://payment-service:8085
+      - LLM_MOCK_MODE=true
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8086/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
 
   api-gateway:
     build: ./api-gateway

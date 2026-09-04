@@ -16,7 +16,14 @@ spring:
     username: guest
     password: guest
 management:
-  endpoints.web.exposure.include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
 recovery:
   payment-service-url: 
   batch-run: 
