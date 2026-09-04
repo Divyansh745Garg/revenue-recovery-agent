@@ -35,6 +35,10 @@ public class Payment {
     @Column(nullable = false)
     private String status; // SUCCESS, FAILED
 
+    /** Synthetic classification for a failed mock payment; status remains authoritative. */
+    @Enumerated(EnumType.STRING)
+    private PaymentFailureReason declineCode;
+
     @Column(unique = true)
     private String transactionId;
 

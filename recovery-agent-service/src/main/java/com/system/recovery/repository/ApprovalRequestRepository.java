@@ -1,0 +1,1 @@
+package com.system.recovery.repository; import com.system.recovery.model.ApprovalRequest; import org.springframework.data.jpa.repository.JpaRepository; import java.util.*; public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest,UUID>{ List<ApprovalRequest> findByStatus(String status); }

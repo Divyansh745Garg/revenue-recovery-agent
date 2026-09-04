@@ -5,6 +5,7 @@ import com.system.payment.dto.OrderEvent;
 import com.system.payment.dto.PaymentEvent;
 import com.system.payment.dto.PaymentFailedEvent;
 import com.system.payment.model.Payment;
+import com.system.payment.model.PaymentFailureReason;
 import com.system.payment.repository.PaymentRepository;
 import lombok.extern.slf4j.Slf4j; // <-- Removed @RequiredArgsConstructor
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -22,6 +23,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final FailureInjector failureInjector;
 
     // 1. Declare the counter
     private final Counter paymentDeclinedCounter;
@@ -32,9 +34,11 @@ public class PaymentService {
     // 2. Custom Constructor: Inject dependencies AND the MeterRegistry
     public PaymentService(PaymentRepository paymentRepository,
                           RabbitTemplate rabbitTemplate,
+                          FailureInjector failureInjector,
                           MeterRegistry registry) {
         this.paymentRepository = paymentRepository;
         this.rabbitTemplate = rabbitTemplate;
+        this.failureInjector = failureInjector;
 
         // 3. Build and register the custom business metric with Prometheus!
         this.paymentDeclinedCounter = Counter.builder("business_payments_declined_total")
@@ -78,7 +82,9 @@ public class PaymentService {
             // ==========================================
             // PATH B: PAYMENT FAILED (TRIGGER SAGA ROLLBACK)
             // ==========================================
-            log.error("❌ Payment Declined for Order: {}", event.orderId());
+            FailureInjector.FailureInjection injection = failureInjector.inject();
+            PaymentFailureReason declineCode = injection.declineCode();
+            log.error("❌ Payment Declined for Order: {} with code: {}", event.orderId(), declineCode);
 
             // 4. INCREMENT THE GRAFANA METRIC!
             paymentDeclinedCounter.increment();
@@ -89,13 +95,15 @@ public class PaymentService {
                     .userId(event.userId())
                     .amount(event.totalAmount())
                     .status("FAILED")
+                    .declineCode(declineCode)
                     .build();
             paymentRepository.save(payment);
 
             // Broadcast the failure to RabbitMQ so the Order Service can catch it
             PaymentFailedEvent failedEvent = new PaymentFailedEvent(
                     event.orderId(),
-                    "Insufficient Funds"
+                    humanReadableReason(declineCode),
+                    declineCode
             );
 
             rabbitTemplate.convertAndSend(
@@ -104,12 +112,15 @@ public class PaymentService {
                     failedEvent
             );
 
-            log.info("PaymentFailedEvent published. Awaiting Order Service to initiate rollback.");
+            log.info("PaymentFailedEvent published with decline code {}. Awaiting Order Service to initiate rollback.", declineCode);
         }
     }
 
     // Helper method to let you test the Rollback!
     private boolean simulatePaymentGateway() {
         return simulateSuccess;
+    }
+    private String humanReadableReason(PaymentFailureReason declineCode) {
+        return declineCode.name();
     }
 }

@@ -1,0 +1,22 @@
+server:
+  port: 8086
+spring:
+  application:
+    name: recovery-agent-service
+  datasource:
+    url: 
+    username: 
+    password: 
+  jpa:
+    hibernate:
+      ddl-auto: update
+  rabbitmq:
+    host: 
+    port: 5672
+    username: guest
+    password: guest
+management:
+  endpoints.web.exposure.include: health,info,prometheus
+recovery:
+  payment-service-url: 
+  batch-run: 
