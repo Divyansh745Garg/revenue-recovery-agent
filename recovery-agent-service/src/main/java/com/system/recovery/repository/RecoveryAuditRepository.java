@@ -1,0 +1,1 @@
+package com.system.recovery.repository; import com.system.recovery.model.RecoveryAudit; import org.springframework.data.jpa.repository.JpaRepository; import java.util.UUID; public interface RecoveryAuditRepository extends JpaRepository<RecoveryAudit,UUID>{}
