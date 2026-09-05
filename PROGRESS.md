@@ -50,3 +50,12 @@ Verification:
 - Stack confirmed healthy via `docker compose ps` after 90s start period.
 - Batch run (count=30) confirmed nonzero recovery numbers: [paste actual output].
 - Remaining: Scenario A/B one-command scripts, README, Definition-of-Done review.
+## Manual update - Scenario B & Wrap-Up
+- Scenario A (Auto-Safe): Verified via manual script execution (order_status: PAID).
+- Scenario B (Approval-Gated): Verified via manual REST calls (ESCALATE_HUMAN -> queue entry -> approved).
+- Phase 6 (README): Completed. Added simulation and blast radius constraints.
+- Phase 7 (DoD): Completed. Backend execution is 100% finished.
+
+## Merchant Recovery Console dashboard - Complete (2026-09-04)
+- Added recovery-agent-service/src/main/resources/static/dashboard.html with mock scenario controls, approval actions, batch stat cards, and a canvas recovery curve.
+- Added one frontend link opening http://localhost:8086/dashboard.html in a new tab.
