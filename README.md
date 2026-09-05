@@ -1,10 +1,6 @@
 # Distributed E-Commerce Backend
 
 > A production-inspired distributed e-commerce platform built with **Java 21**, **Spring Boot 3**, **Docker**, **RabbitMQ**, **Redis**, and **PostgreSQL**. The project demonstrates enterprise backend architecture through microservices, Saga-based distributed transactions, stateless authentication, event-driven communication, and scalable system design.
-
-> **📚 Architecture & Engineering Deep Dive**  
-> For a detailed breakdown of the system design—including the Transactional Outbox pattern, Saga rollbacks, Redis-backed idempotency, and the "Castle & Moat" security model—see **[Architecture.md](Architecture.md)**.
-
 ---
 
 # System Architecture
@@ -298,27 +294,12 @@ distributed-ecommerce
 ├── pom.xml
 ├── README.md
 └── ARCHITECTURE.md
-```
 
 ---
 
-# Future Improvements
-
-- OpenTelemetry distributed tracing
-- Resilience4j circuit breakers
-- Kafka event streaming
-- Kubernetes deployment manifests
-- GitHub Actions CI/CD pipeline
-- Cache-aside strategy for product catalog
-
 ---
 
-## Documentation
 
-| Document | Description |
-|----------|-------------|
-| **README.md** | Project overview and setup instructions |
-| **ARCHITECTURE.md** | Deep dive into architecture, distributed transactions, Saga choreography, Transactional Outbox, security model, and engineering decisions |
 
 ---
 
