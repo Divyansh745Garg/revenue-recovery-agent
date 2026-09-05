@@ -53,8 +53,7 @@ the first two categories deterministically. For the third, Recoup runs a bounded
 that decides — from a fixed, auditable menu of actions — what's worth trying, and gates
 anything customer-facing behind human approval before it happens.
 
-A basic overview of the project is available inside the notes directory to discuss the inside working, the different kinds of payment failure scenarios, classification of them, the LLM's decision-making based on the soft failure and managing them into the database for identifying the users transaction history metadata.
-
+*(Note: A detailed architectural breakdown and failure scenario mapping can be found in the `notes/` directory).*
 ## Architecture
 
 ```
@@ -186,18 +185,125 @@ re-executed. This guarantee sits underneath every action the agent can take.
 
 ## Data flow: entry, validation, exit
 
-**Entry.** A `payment.failed` event on RabbitMQ carrying a `declineCode` and order/customer
-identifiers.
 
-**Routing.** The classifier reads `declineCode`; technical/terminal reasons go to
-auto-retry or notify-and-stop. Only soft/ambiguous reasons continue.
-
-**Bundle construction.** The recovery agent queries order/payment/customer data to build a
-structured signal bundle — order value, this customer's own prior recovery history,
-attempt count, hours since decline. No raw logs reach the model, only this structured object.
-
-**Model call.** The bundle is sent to Gemini 3.7 Flash with a system prompt constraining
-output to a fixed JSON schema.
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│ 1. ENTRY                                                             │
+│                                                                      │
+│ payment.failed event                                                 │
+│        │                                                             │
+│        └── declineCode + order/payment identifiers                   │
+│                         │                                            │
+│                         ▼                                            │
+│                       RabbitMQ                                       │
+└─────────────────────────┬────────────────────────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 2. ROUTING                                                           │
+│                                                                      │
+│ Java Failure Classifier                                              │
+│        │                                                             │
+│        ├── Technical / Terminal ──────► Bypass Recovery Agent        │
+│        │                               (Retry / Notify / Stop)       │
+│        │                                                             │
+│        └── Soft / Ambiguous ─────────► Recovery Agent                │
+└──────────────────────────────────────┬───────────────────────────────┘
+                                       │
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 3. SIGNAL BUNDLE CONSTRUCTION                                        │
+│                                                                      │
+│ Recovery Agent queries PostgreSQL / relational data                  │
+│                                                                      │
+│   • Order value                                                      │
+│   • Previous recovery history                                        │
+│   • Attempt count                                                    │
+│   • Temporal / contextual data                                       │
+│                                                                      │
+│   Raw application logs are NEVER sent to the LLM.                    │
+│   Only structured, relevant signals are included.                    │
+└──────────────────────────────────────┬───────────────────────────────┘
+                                       │
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 4. MODEL DECISION                                                    │
+│                                                                      │
+│              Signal Bundle                                           │
+│                    │                                                 │
+│                    ▼                                                 │
+│          ┌─────────────────────┐                                     │
+│          │ Gemini 3.7 Flash    │                                     │
+│          │                     │                                     │
+│          │ Strict System Prompt│                                     │
+│          │ + JSON Schema       │                                     │
+│          └──────────┬──────────┘                                     │
+│                     │                                                │
+│                     ▼                                                │
+│              Structured Action                                       │
+└─────────────────────┬────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 5. DETERMINISTIC VALIDATION                                          │
+│                                                                      │
+│ Application code validates the model output.                         │
+│                                                                      │
+│   ✓ Action must belong to a closed enum                              │
+│     RETRY_SILENT | ESCALATE_HUMAN | STOP | ...                       │
+│                                                                      │
+│   ✓ Maximum 3 attempts per order                                     │
+│     Enforced independently by application code                       │
+│                                                                      │
+│   ✓ requires_human_approval                                          │
+│     Derived from the action type in code                             │
+│     Never trusted directly from the model                            │
+└─────────────────────┬────────────────────────────────────────────────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ Approval      │
+              │ Required?     │
+              └───────┬───────┘
+                      │
+             ┌────────┴────────┐
+             │                 │
+            NO                YES
+             │                 │
+             ▼                 ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ 6A. IMMEDIATE        │  │ 6B. HUMAN APPROVAL   │
+│     EXECUTION        │  │                      │
+│                      │  │ Postgres-backed      │
+│ Execute action       │  │ Approval Queue       │
+│ immediately          │  │                      │
+└──────────┬───────────┘  └──────────┬───────────┘
+           │                         │
+           │                    Human approval
+           │                         │
+           │                         ▼
+           │                ┌──────────────────┐
+           │                │ Execute Approved │
+           │                │ Action           │
+           │                └────────┬─────────┘
+           │                         │
+           └────────────┬────────────┘
+                        ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 7. AUDIT                                                             │
+│                                                                      │
+│ Every decision is permanently recorded as an immutable outbox record │
+│                                                                      │
+│   Input Signal Bundle                                                │
+│          +                                                           │
+│   Model Decision                                                     │
+│          +                                                           │
+│   Decision Justification                                             │
+│          │                                                           │
+│          ▼                                                           │
+│   Immutable Audit Record                                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
 **Validation, before anything executes.**
 - A closed enum of allowed actions — `RETRY_SILENT`, `OFFER_ALT_METHOD`, `SEND_NUDGE`,
@@ -212,6 +318,26 @@ it, then executes through the same layer.
 
 **Always.** Every decision, either path, is written to the outbox as a permanent audit
 record — input bundle, decision, justification, outcome.
+
+### Key Safety Guarantees
+
+| Guarantee                   | Enforcement                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| **Closed action space**     | Model output is validated against a predefined enum            |
+| **Maximum attempts**        | Hard limit of 3 attempts enforced in application code          |
+| **Human approval**          | Derived deterministically from the action type                 |
+| **No raw logs to LLM**      | Model receives only the structured Signal Bundle               |
+| **Structured model output** | Strict JSON schema enforced at the model boundary              |
+| **Idempotent execution**    | Existing order/payment idempotency key is reused               |
+| **Durable auditability**    | Every decision is persisted as an immutable outbox record      |
+| **Human-in-the-loop**       | Risky actions are halted in a PostgreSQL-backed Approval Queue |
+
+### Design Principle
+
+> **The LLM recommends; deterministic application code decides what is actually allowed to execute.**
+
+This separation ensures that the recovery agent can provide intelligent decisions without becoming a source of uncontrolled side effects. The model operates within a constrained action space, while critical business rules, attempt limits, approval requirements, and execution safeguards remain outside the model and under application control.
+
 
 ## Demo scenarios
 
